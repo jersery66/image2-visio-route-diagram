@@ -1,0 +1,9 @@
+interface:
+  display_name: "Image2 Visio Route Diagram"
+  short_description: "Build modular Visio route diagrams with image2 icons and editable text."
+  brand_color: "#15548F"
+  default_prompt: "Use $image2-visio-route-diagram to create a modular Visio technical route diagram with image2-generated no-text icons and editable text."
+
+policy:
+  allow_implicit_invocation: true
+
