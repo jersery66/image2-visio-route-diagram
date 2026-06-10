@@ -61,15 +61,26 @@ Use $image2-visio-route-diagram to create a modular Visio route diagram with ima
 8. 检查 `.vsdx` 包结构，确认不是一张整图。
 9. 确认 manifest 中所有 icon status 为 ok。
 
+## 最终交付物
+
+每次最终交付应包含：
+
+- **可编辑 `.vsdx` 文件** — 主 Visio 文件，包含原生形状和文本框。
+- **PNG 预览图** — 主页面渲染导出，方便快速视觉审查。
+- **`icon_manifest.json`** — 图标清单，记录每个图标的 icon_id、meaning、prompt、key_color、file、placement、status。
+- **验证脚本输出** — `inspect_vsdx_structure.py` 的完整 JSON 结果和通过/失败摘要。
+
+这四样产物让你以后可以定位和重新生成某个图标，而不需要反向拆解 `.vsdx`。
+
 ## 验证脚本
 
 内置脚本可检查 Visio 文件是否具备模块化结构：
 
 ```powershell
-python .\scripts\inspect_vsdx_structure.py .\output.vsdx --expect-single-page --min-media 5 --min-text 10 --forbid-reference --forbid-large-background-image
+python .\scripts\inspect_vsdx_structure.py .\output.vsdx --expect-single-page --min-media 5 --min-text 10 --min-image-shapes 5 --min-native-shapes 10 --forbid-reference --forbid-large-background-image
 ```
 
-它会输出页数、媒体文件数量、形状数量、文本节点数量、是否存在参考页标记、页面尺寸，以及每个图片形状的面积占比。
+它会输出页数、媒体文件数量、图片形状数量、原生 Visio 形状数量、文本节点数量、是否存在参考页标记、页面尺寸，以及每个图片形状的面积占比。
 
 可用参数：
 
@@ -78,6 +89,8 @@ python .\scripts\inspect_vsdx_structure.py .\output.vsdx --expect-single-page --
 | `--expect-single-page` | 期望只有一页（不含参考页） |
 | `--min-media N` | 期望至少 N 个媒体文件 |
 | `--min-text N` | 期望至少 N 个文本节点 |
+| `--min-image-shapes N` | 期望页面上至少 N 个图片形状 |
+| `--min-native-shapes N` | 期望至少 N 个原生 Visio 形状（非图片） |
 | `--forbid-reference` | 不允许存在 `Original_Image_Reference` 标记 |
 | `--forbid-large-background-image` | 检查是否有单张图片占据页面面积超过阈值 |
 | `--max-image-area-ratio N` | 图片面积占比上限（默认 0.35，即 35 %） |
@@ -153,15 +166,26 @@ Expected workflow:
 8. Inspect the `.vsdx` package for modular structure.
 9. Confirm all icons in the manifest have status `ok`.
 
+## Final Delivery
+
+Every deliverable must include:
+
+- **Editable `.vsdx` file** — the main Visio diagram with native shapes and text boxes.
+- **PNG preview** — a rendered export of the main page for quick visual review.
+- **`icon_manifest.json`** — the manifest documenting all icon modules (icon_id, meaning, prompt, key_color, file, placement, status).
+- **Validation output** — the full JSON result and pass/fail summary from `inspect_vsdx_structure.py`.
+
+These four artifacts let you re-generate or repair individual icons later without reverse-engineering the `.vsdx`.
+
 ## Validation Helper
 
 The included script checks whether a Visio file looks structurally modular:
 
 ```powershell
-python .\scripts\inspect_vsdx_structure.py .\output.vsdx --expect-single-page --min-media 5 --min-text 10 --forbid-reference --forbid-large-background-image
+python .\scripts\inspect_vsdx_structure.py .\output.vsdx --expect-single-page --min-media 5 --min-text 10 --min-image-shapes 5 --min-native-shapes 10 --forbid-reference --forbid-large-background-image
 ```
 
-It reports page count, media count, shape count, text-node count, whether a reference-page marker is present, page dimensions, and the area ratio of every image shape.
+It reports page count, media count, image shape count, native Visio shape count, text-node count, whether a reference-page marker is present, page dimensions, and the area ratio of every image shape.
 
 Available flags:
 
@@ -170,6 +194,8 @@ Available flags:
 | `--expect-single-page` | Expect exactly one main page (no reference page) |
 | `--min-media N` | Expect at least N media files |
 | `--min-text N` | Expect at least N text nodes |
+| `--min-image-shapes N` | Expect at least N image shapes on the page |
+| `--min-native-shapes N` | Expect at least N native (non-image) Visio shapes |
 | `--forbid-reference` | Fail if `Original_Image_Reference` marker exists |
 | `--forbid-large-background-image` | Fail if any single image occupies more than a threshold of the page area |
 | `--max-image-area-ratio N` | Maximum allowed image-to-page area ratio (default 0.35, i.e. 35 %) |

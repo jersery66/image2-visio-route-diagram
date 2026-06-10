@@ -27,19 +27,19 @@ def inspect(path: Path) -> dict:
         pages = [name for name in names if PAGE_RE.match(name)]
         media = [name for name in names if name.startswith("visio/media/")]
         text_nodes = 0
-        shape_tags = 0
         reference_marker = False
         page_dimensions: list[tuple[float, float]] = []
         image_shapes: list[dict] = []
+        native_shape_count = 0
+        total_shape_count = 0
 
         for page in pages:
             xml_content = zf.read(page).decode("utf-8", "ignore")
             text_nodes += xml_content.count("<Text>")
-            shape_tags += xml_content.count("<Shape ")
             if "Original_Image_Reference" in xml_content:
                 reference_marker = True
 
-            # Parse XML for page dimensions and image shape areas
+            # Parse XML for page dimensions and detailed shape classification
             try:
                 root = ET.fromstring(xml_content)
             except ET.ParseError:
@@ -54,30 +54,35 @@ def inspect(path: Path) -> dict:
                     ph = _float(ph_el.text if ph_el is not None else None)
                     page_dimensions.append((pw, ph))
 
-            # --- Image shapes (ForeignData) ---
+            # --- Shape classification ---
             for shape in root.iter(f"{{{V_NS}}}Shape"):
+                total_shape_count += 1
                 fd = shape.find(f"{{{V_NS}}}ForeignData")
-                if fd is None:
-                    continue
-                xform = shape.find(f"{{{V_NS}}}XForm")
-                if xform is None:
-                    continue
-                w_el = xform.find(f"{{{V_NS}}}Width")
-                h_el = xform.find(f"{{{V_NS}}}Height")
-                w = _float(w_el.text if w_el is not None else None)
-                h = _float(h_el.text if h_el is not None else None)
-                if w > 0 and h > 0:
-                    image_shapes.append({"width": w, "height": h, "area": w * h})
+                if fd is not None:
+                    xform = shape.find(f"{{{V_NS}}}XForm")
+                    if xform is not None:
+                        w_el = xform.find(f"{{{V_NS}}}Width")
+                        h_el = xform.find(f"{{{V_NS}}}Height")
+                        w = _float(w_el.text if w_el is not None else None)
+                        h = _float(h_el.text if h_el is not None else None)
+                        if w > 0 and h > 0:
+                            image_shapes.append(
+                                {"width": w, "height": h, "area": w * h}
+                            )
+                else:
+                    native_shape_count += 1
 
         return {
             "file": str(path.resolve()),
             "pages": len(pages),
             "media_files": len(media),
-            "shape_tags": shape_tags,
+            "total_shapes": total_shape_count,
+            "image_shapes_list": image_shapes,
+            "image_shape_count": len(image_shapes),
+            "native_shape_count": native_shape_count,
             "text_nodes": text_nodes,
             "reference_page_marker": reference_marker,
             "page_dimensions": page_dimensions,
-            "image_shapes": image_shapes,
         }
 
 
@@ -89,6 +94,10 @@ def main() -> int:
     parser.add_argument("--expect-single-page", action="store_true")
     parser.add_argument("--min-media", type=int, default=None)
     parser.add_argument("--min-text", type=int, default=None)
+    parser.add_argument("--min-image-shapes", type=int, default=None,
+                        help="Expected minimum number of image shapes on the page.")
+    parser.add_argument("--min-native-shapes", type=int, default=None,
+                        help="Expected minimum number of native (non-image) Visio shapes.")
     parser.add_argument("--forbid-reference", action="store_true")
     parser.add_argument(
         "--forbid-large-background-image",
@@ -120,16 +129,26 @@ def main() -> int:
             f"expected at least {args.min_text} text nodes, "
             f"found {info['text_nodes']}"
         )
+    if args.min_image_shapes is not None and info["image_shape_count"] < args.min_image_shapes:
+        failures.append(
+            f"expected at least {args.min_image_shapes} image shapes on page, "
+            f"found {info['image_shape_count']}"
+        )
+    if args.min_native_shapes is not None and info["native_shape_count"] < args.min_native_shapes:
+        failures.append(
+            f"expected at least {args.min_native_shapes} native Visio shapes, "
+            f"found {info['native_shape_count']}"
+        )
     if args.forbid_reference and info["reference_page_marker"]:
         failures.append("found Original_Image_Reference marker")
 
     if args.forbid_large_background_image:
         max_ratio = args.max_image_area_ratio
-        if info["page_dimensions"] and info["image_shapes"]:
+        if info["page_dimensions"] and info["image_shapes_list"]:
             pw, ph = info["page_dimensions"][0]
             page_area = pw * ph
             if page_area > 0:
-                for img in info["image_shapes"]:
+                for img in info["image_shapes_list"]:
                     ratio = img["area"] / page_area
                     if ratio > max_ratio:
                         failures.append(
@@ -137,7 +156,7 @@ def main() -> int:
                             f"occupies {ratio:.1%} of page area "
                             f"({max_ratio:.0%} max allowed)"
                         )
-            elif info["image_shapes"]:
+            elif info["image_shapes_list"]:
                 failures.append(
                     "could not determine page dimensions to check image area ratio"
                 )

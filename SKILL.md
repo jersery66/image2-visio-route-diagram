@@ -99,6 +99,17 @@ Before generating any icons, produce an `icon_manifest.json` (or equivalent tabl
 
 The manifest helps the agent plan consistently and lets you review or re-generate individual icons without touching unrelated modules.
 
+### Single-icon vs. sprite-sheet decision rule
+
+| Generate each icon individually when… | Use a sprite sheet only when… |
+|---|---|
+| The icon is semantically important (e.g. the central model or key dataset). | Icons are visually simple (single object, few details). |
+| The icon contains multiple objects or fine details. | All modules share the same style and color palette. |
+| The icon failed once in a sprite sheet (semantic drift or distortion). | The primary goal is style consistency rather than semantic precision. |
+| The icon needs a distinct perspective or composition. | |
+
+**If semantic accuracy conflicts with style consistency, prioritize semantic accuracy and regenerate the icon individually.**
+
 ## Failure Recovery
 
 When an icon asset fails quality checks, follow these rules instead of trying to repair the image:
@@ -114,17 +125,30 @@ When an icon asset fails quality checks, follow these rules instead of trying to
 
 **Core rule**: when an icon is defective, always regenerate it. Post-processing tricks (eraser, clone stamp, forced upscale, alpha tweaks) create inconsistency and waste time. The only exception is chroma-key removal, which is a deterministic local operation.
 
+## Final Delivery
+
+Every deliverable must include:
+
+- **Editable `.vsdx` file** — the main Visio diagram with native shapes and text boxes.
+- **PNG preview** — a rendered export of the main page for quick visual review.
+- **`icon_manifest.json`** — the manifest documenting all icon modules (icon_id, meaning, prompt, key_color, file, placement, status).
+- **Validation output** — the full JSON result and pass/fail summary from `inspect_vsdx_structure.py`.
+
+These four artifacts let you re-generate or repair individual icons later without reverse-engineering the `.vsdx`.
+
 ## Validation Checklist
 
 Before final response, verify:
 
 - Preview PNG exists and shows the main route page.
 - VSDX has the expected single main page unless user asked for references.
-- Media count roughly equals the number of generated icon modules, not `1`.
+- Image shape count roughly equals the number of generated icon modules, and total shapes include both icon images and native Visio shapes.
 - Text node count is nonzero and includes the labels/descriptions.
 - No `Original_Image_Reference` marker is present in the final VSDX.
 - No single image occupies more than 35 % of the page area (run `--forbid-large-background-image`).
+- Native shape count indicates actual Visio objects (frames, arrows, containers), not just embedded images.
 - Icon manifest (or equivalent) is complete with status and placement.
+- Final delivery includes `.vsdx` + PNG preview + `icon_manifest.json` + validation output.
 - The final answer states the editability boundary: icon modules are raster PNGs; text boxes, frames, and arrows are editable Visio objects.
 
 ## Useful Commands
@@ -132,7 +156,7 @@ Before final response, verify:
 Inspect a VSDX with all checks:
 
 ```powershell
-python path\to\scripts\inspect_vsdx_structure.py output.vsdx --expect-single-page --min-media 5 --min-text 10 --forbid-reference --forbid-large-background-image
+python path\to\scripts\inspect_vsdx_structure.py output.vsdx --expect-single-page --min-media 5 --min-text 10 --min-image-shapes 5 --min-native-shapes 10 --forbid-reference --forbid-large-background-image
 ```
 
 Check for unexpectedly large background images only:
