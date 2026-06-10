@@ -16,6 +16,9 @@
 - 根据图标主色选择安全色键。绿色模块应使用洋红 `#ff00ff`，不要用绿色背景。
 - 最终交付物不保留 `Original_Image_Reference` 参考页或整图背景。
 - 声称文件可编辑前，先检查 `.vsdx` 包结构。
+- 不从完整路线图截图中裁剪图标；只从专用 icon sprite sheet 裁剪。
+- 低清路线图截图只能作为语义参考，不能高清化后直接复用。
+- 图标有明显缺陷（模糊、色晕、文字残留、语义错误）时重新生成，不做后期修补。
 
 ## 仓库结构
 
@@ -48,24 +51,36 @@ Use $image2-visio-route-diagram to create a modular Visio route diagram with ima
 
 推荐流程：
 
-1. 先整理路线图大纲和版式。
-2. 用 image2/image_gen 生成图标模块或模块素材表。
+1. 整理路线图大纲和版式，生成图标清单 manifest（含 icon_id、meaning、prompt、key_color、placement）。
+2. 用 image2/image_gen 按 manifest 生成独立无字图标或 sprite sheet。
 3. 本地去除色键背景。
-4. 裁出独立透明 PNG 图标模块。
+4. 裁出独立透明 PNG 图标模块（至少 512×512 px）。
 5. 按版式坐标放入 Visio。
 6. 所有文字都用 Visio 文本框添加。
-7. 导出 PNG 预览。
+7. 导出 PNG 预览，对比检查。
 8. 检查 `.vsdx` 包结构，确认不是一张整图。
+9. 确认 manifest 中所有 icon status 为 ok。
 
 ## 验证脚本
 
 内置脚本可检查 Visio 文件是否具备模块化结构：
 
 ```powershell
-python .\scripts\inspect_vsdx_structure.py .\output.vsdx --expect-single-page --min-media 5 --min-text 10 --forbid-reference
+python .\scripts\inspect_vsdx_structure.py .\output.vsdx --expect-single-page --min-media 5 --min-text 10 --forbid-reference --forbid-large-background-image
 ```
 
-它会输出页数、媒体文件数量、形状数量、文本节点数量，以及是否存在参考页标记。
+它会输出页数、媒体文件数量、形状数量、文本节点数量、是否存在参考页标记、页面尺寸，以及每个图片形状的面积占比。
+
+可用参数：
+
+| 参数 | 作用 |
+|---|---|
+| `--expect-single-page` | 期望只有一页（不含参考页） |
+| `--min-media N` | 期望至少 N 个媒体文件 |
+| `--min-text N` | 期望至少 N 个文本节点 |
+| `--forbid-reference` | 不允许存在 `Original_Image_Reference` 标记 |
+| `--forbid-large-background-image` | 检查是否有单张图片占据页面面积超过阈值 |
+| `--max-image-area-ratio N` | 图片面积占比上限（默认 0.35，即 35 %） |
 
 ## 可编辑边界
 
@@ -93,6 +108,9 @@ Core idea: image2/image_gen creates the no-text icon modules, Visio text boxes c
 - Use a safe chroma key per icon color. Green modules should use magenta `#ff00ff`, not green.
 - Do not leave an `Original_Image_Reference` page or whole-image background in the final deliverable.
 - Verify the `.vsdx` structure before claiming the file is editable.
+- Do not crop icons from a full rendered route-diagram screenshot; crop only from a dedicated icon sprite sheet.
+- Low-resolution route-diagram screenshots may be used only as semantic references — do not upscale and reuse them as final assets.
+- Regenerate defective icons (blurry, haloed, text residue, wrong semantics) instead of patching them in post-processing.
 
 ## Repository Layout
 
@@ -125,24 +143,36 @@ Use $image2-visio-route-diagram to create a modular Visio route diagram with ima
 
 Expected workflow:
 
-1. Draft the route layout.
-2. Generate icon modules or module sprite sheets with image2/image_gen.
+1. Draft the route layout and produce an icon manifest (icon_id, meaning, prompt, key_color, placement).
+2. Generate icon modules or module sprite sheets with image2/image_gen, following the manifest.
 3. Remove chroma-key backgrounds locally.
-4. Crop individual transparent PNG icon modules.
+4. Crop individual transparent PNG icon modules (at least 512×512 px).
 5. Place modules in Visio by layout coordinates.
 6. Add all labels as editable Visio text boxes.
-7. Export a preview PNG.
+7. Export a preview PNG and visually compare.
 8. Inspect the `.vsdx` package for modular structure.
+9. Confirm all icons in the manifest have status `ok`.
 
 ## Validation Helper
 
 The included script checks whether a Visio file looks structurally modular:
 
 ```powershell
-python .\scripts\inspect_vsdx_structure.py .\output.vsdx --expect-single-page --min-media 5 --min-text 10 --forbid-reference
+python .\scripts\inspect_vsdx_structure.py .\output.vsdx --expect-single-page --min-media 5 --min-text 10 --forbid-reference --forbid-large-background-image
 ```
 
-It reports page count, media count, shape count, text-node count, and whether a reference-page marker is present.
+It reports page count, media count, shape count, text-node count, whether a reference-page marker is present, page dimensions, and the area ratio of every image shape.
+
+Available flags:
+
+| Flag | Purpose |
+|---|---|
+| `--expect-single-page` | Expect exactly one main page (no reference page) |
+| `--min-media N` | Expect at least N media files |
+| `--min-text N` | Expect at least N text nodes |
+| `--forbid-reference` | Fail if `Original_Image_Reference` marker exists |
+| `--forbid-large-background-image` | Fail if any single image occupies more than a threshold of the page area |
+| `--max-image-area-ratio N` | Maximum allowed image-to-page area ratio (default 0.35, i.e. 35 %) |
 
 ## Editability Boundary
 
