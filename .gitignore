@@ -1,8 +1,12 @@
-# Generated outputs
+# Generated outputs (per-project, not tracked)
 plan.json
-research_framework.vsdx
-research_framework_preview.png
-generate_plan.py
+*.vsdx
+*_preview.png
+*_backup_*.vsdx
+
+# Icon assets (generated, too large for GitHub)
+icons/
+*.sprite.png
 
 # Python cache
 __pycache__/
@@ -12,3 +16,8 @@ scripts/__pycache__/
 # OS files
 .DS_Store
 Thumbs.db
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp

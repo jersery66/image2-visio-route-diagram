@@ -134,13 +134,15 @@ Same coordinates as `rect`, but automatically sets `noFill` and `noLine`. Used f
 | `arrow` | No | `"none"`, `"begin"`, `"end"`, `"both"`. Default: `"end"`. |
 | `style.weight` | No | Line width in pt. |
 
-### `polyline` — Multi-segment line
+### `polyline` — Multi-segment line (single shape)
 
 | Field | Required | Description |
 |---|---|---|
 | `points` | Yes | Array of `[x, y]` pairs. Minimum 2 points. |
-| `arrow` | No | Arrow only on the last segment. Same options as `line`. |
+| `arrow` | No | Arrow on the last point. Same options as `line`. |
 | `style.*` | No | Same as `line`. |
+
+The script uses Visio's `DrawSpline` to create a **single selectable shape** through all points. If `DrawSpline` fails, individual segments are drawn and grouped automatically.
 
 ### `image` — Place PNG icon
 

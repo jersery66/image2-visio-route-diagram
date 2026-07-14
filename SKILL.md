@@ -89,3 +89,7 @@ Every deliverable must include:
 | [Typography & Layout](references/typography_and_layout.md) | Phase 3, Step 5 — font sizes, spacing, title placement |
 | [Icon Asset Policy](references/icon_asset_policy.md) | Phase 1-2 — icon generation, chroma key, failure recovery |
 | [PowerShell & Visio Notes](references/powershell_visio_notes.md) | When writing/debugging PS1 scripts or troubleshooting COM |
+| [Icon Manifest Template](references/icon_manifest_template.json) | Phase 1 — sample manifest structure |
+| `scripts/visio_plan_builder.py` | Phase 3 — reusable layout primitives for plan generation |
+| `scripts/remove_chroma_key.py` | Phase 2 — standalone chroma-key background removal |
+| `tests/test_inspect.py` | Development — automated tests for the VSDX inspector |

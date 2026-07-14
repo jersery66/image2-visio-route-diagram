@@ -80,6 +80,10 @@ When an icon asset fails quality checks, **always regenerate** — never post-pr
 
 ## Chroma Key Removal Command
 
+The repository includes a standalone chroma-key removal script:
+
 ```powershell
-python "$env:USERPROFILE\.codex\skills\.system\imagegen\scripts\remove_chroma_key.py" --input sprite.png --out sprite_alpha.png --key-color "#ff00ff" --soft-matte --transparent-threshold 45 --opaque-threshold 170 --despill --force
+python scripts/remove_chroma_key.py --input sprite.png --out sprite_alpha.png --key-color "#ff00ff" --soft-matte --despill --force
 ```
+
+Requires `Pillow` and `numpy` (`pip install Pillow numpy`).

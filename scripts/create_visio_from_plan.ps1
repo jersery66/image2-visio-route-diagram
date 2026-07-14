@@ -33,6 +33,10 @@ if (-not (Test-Path -LiteralPath $PlanPath)) {
 }
 
 $plan = Get-Content -LiteralPath $PlanPath -Raw -Encoding UTF8 | ConvertFrom-Json
+
+# Check font availability before starting Visio
+Test-FontsAvailable $plan
+
 $outDir = Split-Path -Parent $OutVsdx
 if ($outDir) { New-Item -ItemType Directory -Force -Path $outDir | Out-Null }
 if ($OutEmf -and (Split-Path -Parent $OutEmf)) {
@@ -143,16 +147,51 @@ function Draw-Shape($item) {
         return
     }
 
-    # --- Polyline (multi-segment) ---
+    # --- Polyline (single shape via DrawSpline) ---
+    # DrawSpline creates ONE Visio shape through all control points,
+    # so the entire polyline can be selected/styled as a unit.
+    # Fallback: if DrawSpline fails, draw individual segments and group them.
     if ($type -eq "polyline") {
         $points = @($item.points)
-        for ($i = 0; $i -lt ($points.Count - 1); $i++) {
-            $p1 = $points[$i]
-            $p2 = $points[$i + 1]
-            $shape = $script:page.DrawLine((X $p1[0]), (Y $p1[1]), (X $p2[0]), (Y $p2[1]))
+        if ($points.Count -lt 2) { return }
+
+        $drawn = $false
+        try {
+            # Build flat array of doubles: x1, y1, x2, y2, ...
+            $nups = @()
+            foreach ($pt in $points) {
+                $nups += (X $pt[0])
+                $nups += (Y $pt[1])
+            }
+            $shape = $script:page.DrawSpline($nups)
             $style | Add-Member -NotePropertyName noFill -NotePropertyValue $true -Force
             Style-Shape $shape $style
-            if ($i -eq ($points.Count - 2)) { Set-Arrow $shape $item.arrow }
+            Set-Arrow $shape $item.arrow
+            $drawn = $true
+        } catch {
+            Write-Warning "DrawSpline failed, falling back to grouped segments: $($_.Exception.Message)"
+        }
+
+        if (-not $drawn) {
+            # Fallback: draw individual segments and group
+            $segShapes = @()
+            for ($i = 0; $i -lt ($points.Count - 1); $i++) {
+                $p1 = $points[$i]
+                $p2 = $points[$i + 1]
+                $seg = $script:page.DrawLine((X $p1[0]), (Y $p1[1]), (X $p2[0]), (Y $p2[1]))
+                Style-Shape $seg $style
+                $segShapes += $seg
+            }
+            if ($segShapes.Count -gt 0) {
+                try {
+                    $sel = $script:page.CreateSelection($segShapes)
+                    $sel.Group()
+                } catch {
+                    Write-Warning "Could not group polyline segments: $($_.Exception.Message)"
+                }
+                # Apply arrow to last segment
+                Set-Arrow $segShapes[-1] $item.arrow
+            }
         }
         return
     }
@@ -191,6 +230,65 @@ function Set-Arrow($shape, $arrow) {
     $value = if ($arrow) { "$arrow" } else { "end" }
     if ($value -eq "end"  -or $value -eq "both") { Cell $shape "EndArrow"   "13" }
     if ($value -eq "begin" -or $value -eq "both") { Cell $shape "BeginArrow" "13" }
+}
+
+# ---------------------------------------------------------------------------
+# Font availability check
+# ---------------------------------------------------------------------------
+function Test-FontsAvailable($plan) {
+    # Collect all fontFamily values referenced in the plan
+    $planFonts = @{}
+    foreach ($shape in @($plan.shapes)) {
+        if ($shape.style -and $shape.style.fontFamily) {
+            $planFonts[[string]$shape.style.fontFamily] = $true
+        }
+    }
+    if ($planFonts.Count -eq 0) { return }
+
+    # Get installed font names from Windows registry
+    $regPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
+    $installedFonts = @{}
+    try {
+        $fontEntries = Get-ItemProperty -Path $regPath -ErrorAction SilentlyContinue
+        if ($fontEntries) {
+            foreach ($prop in $fontEntries.PSObject.Properties) {
+                # Registry key names are like "Microsoft YaHei (TrueType)"
+                $fontName = ($prop.Name -replace '\s*\(.*\)$', '').Trim()
+                $installedFonts[$fontName] = $true
+            }
+        }
+    } catch {
+        Write-Warning "Could not read font registry. Skipping font check."
+        return
+    }
+
+    # Also check user fonts (Windows 10+)
+    $userFontPath = "$env:LOCALAPPDATA\Microsoft\Windows\Fonts"
+    if (Test-Path $userFontPath) {
+        Get-ChildItem -Path $userFontPath -File | ForEach-Object {
+            $name = $_.BaseName -replace '\s*\(.*\)$', '' -replace '-.*$', ''
+            $installedFonts[$name] = $true
+        }
+    }
+
+    $missing = @()
+    foreach ($font in $planFonts.Keys) {
+        # Check exact match or partial match (some fonts have suffixes)
+        $found = $false
+        foreach ($installed in $installedFonts.Keys) {
+            if ($installed -eq $font -or $installed -like "$font *") {
+                $found = $true
+                break
+            }
+        }
+        if (-not $found) { $missing += $font }
+    }
+
+    if ($missing.Count -gt 0) {
+        Write-Warning "Missing fonts: $($missing -join ', ')"
+        Write-Warning "Visio will substitute missing fonts with defaults, which may affect layout."
+        Write-Warning "Suggested fallback: install 'Microsoft YaHei' for Chinese text or 'Segoe UI' for English."
+    }
 }
 
 # ---------------------------------------------------------------------------

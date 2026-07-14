@@ -1,0 +1,31 @@
+{
+  "icons": [
+    {
+      "icon_id": "risk_perception",
+      "meaning": "多模态风险感知模块，综合文本、语音、表情、行为信号",
+      "prompt": "A clean icon of a brain with signal waves emanating from multiple data sources (text, voice waveform, face expression, body posture), arXiv schematic style, polished vector-like bitmap, crisp outlines, no text, no labels",
+      "key_color": "#00ff00",
+      "file": "risk_perception.png",
+      "placement": "Research 2 - Risk Perception Pathway, Step 2",
+      "status": "ok"
+    },
+    {
+      "icon_id": "alert_level",
+      "meaning": "分级预警系统，低/中/高/危机四个等级",
+      "prompt": "A clean icon of a traffic-light style alert indicator with four colored levels (green, yellow, orange, red), arXiv schematic style, polished vector-like bitmap, crisp outlines, no text, no labels",
+      "key_color": "#00ff00",
+      "file": "alert_level.png",
+      "placement": "Research 2 - Risk Perception Pathway, Step 4",
+      "status": "ok"
+    },
+    {
+      "icon_id": "intervention",
+      "meaning": "分级干预匹配，心理支持、重点关注、专业转介",
+      "prompt": "A clean icon of a supportive hands reaching out with a heart symbol, representing psychological intervention and care, arXiv schematic style, polished vector-like bitmap, crisp outlines, no text, no labels",
+      "key_color": "#00ff00",
+      "file": "intervention.png",
+      "placement": "Research 2 - Intervention Pathway, Step 2",
+      "status": "ok"
+    }
+  ]
+}

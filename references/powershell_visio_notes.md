@@ -78,6 +78,18 @@ $pinX = $px / $scale
 $shape.CellsU("PinX").FormulaU = "$pinX in"
 ```
 
+## Polyline Rendering
+
+The `polyline` shape type now uses Visio's `DrawSpline` method, which creates a **single shape** connecting all control points. This means the entire polyline can be selected, moved, and styled as one unit in Visio.
+
+If `DrawSpline` fails (e.g., on older Visio versions), the script falls back to drawing individual line segments and grouping them via `CreateSelection().Group()`.
+
+## Font Availability Detection
+
+Before starting Visio COM, the script scans all `fontFamily` values in the plan and checks them against installed Windows fonts (via registry `HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts` and user fonts in `%LOCALAPPDATA%\Microsoft\Windows\Fonts`).
+
+If any fonts are missing, the script prints a warning with the missing font names and suggests fallback fonts. The script does NOT abort — Visio will substitute defaults, which may affect text layout.
+
 ## Useful Commands
 
 ### Generate Visio from JSON plan
