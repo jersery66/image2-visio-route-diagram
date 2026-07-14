@@ -1,0 +1,14 @@
+# Generated outputs
+plan.json
+research_framework.vsdx
+research_framework_preview.png
+generate_plan.py
+
+# Python cache
+__pycache__/
+*.pyc
+scripts/__pycache__/
+
+# OS files
+.DS_Store
+Thumbs.db

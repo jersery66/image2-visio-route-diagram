@@ -1,49 +1,149 @@
 ---
 name: image2-visio-route-diagram
-description: Use when creating or repairing a Microsoft Visio technical route diagram, workflow figure, arXiv-style schematic, or grant-route figure that needs image2-generated icon modules with editable Visio text.
+description: Use when creating or repairing a Microsoft Visio technical route diagram, workflow figure, arXiv-style schematic, or grant-route figure that needs image2-generated icon modules with editable Visio text. Combines icon generation with Visio COM automation for deterministic, stable output.
 ---
 
 # Image2 Visio Route Diagram
 
 ## Core Principle
 
-Final Visio files must be modular: image2-generated no-text transparent icon modules plus editable Visio text boxes and native Visio frames/arrows. Never disguise a whole rendered picture as an editable Visio diagram.
+Final Visio files must be **modular and deterministic**: image2-generated no-text transparent icon modules plus editable Visio text boxes and native Visio frames/arrows, assembled by a PowerShell COM automation script from a JSON plan. Never disguise a whole rendered picture as an editable Visio diagram. Never re-generate or overwrite the main `.vsdx` during validation.
 
 ## Required Workflow
 
-1. Derive the diagram outline and layout from the proposal/reference figure.
-2. Generate a full draft image only for visual direction if helpful. Do not use that full image as the final Visio content.
-3. Generate icon assets with image2/image_gen as separate no-text modules or a sprite sheet. Prompt for:
-   - no Chinese or English text
-   - no labels, letters, numbers, legends, titles, or watermarks
-   - flat chroma-key background
-   - generous padding and no clipping
-4. Choose chroma key by icon color, then remove locally:
+### Phase 1: Analyze and Plan
+
+1. **Analyze the reference image** — derive diagram outline, layout regions, bounding boxes, labels, color scheme, and canvas aspect ratio. Record pixel dimensions.
+
+2. **Generate icon manifest** — create `icon_manifest.json` listing every icon module: `icon_id`, `meaning`, `prompt`, `key_color`, `file`, `placement`, `status`.
+
+### Phase 2: Generate Icons
+
+3. **Generate icon assets with image2** as separate no-text modules or a sprite sheet:
+   - No Chinese or English text, no labels, letters, numbers, legends, titles, or watermarks.
+   - Flat chroma-key background with generous padding and no clipping.
    - Blue/purple/orange modules: `#00ff00` is usually safe.
-   - Green modules: use `#ff00ff`, not green.
-   - Mixed palettes: split into multiple image2 sprite sheets by dominant color.
-5. Crop from the image2 sprite sheet into individual transparent PNG modules. Do not crop icons from a full route-diagram screenshot.
-6. Build the Visio page from:
-   - transparent PNG modules positioned by layout coordinates
-   - native Visio rectangles/roundrects/lines/arrows for frames and connectors when possible
-   - editable Visio text boxes for all explanatory text
-7. Do not include a final reference page or background image unless explicitly requested. If a reference page was useful while building, remove it or save the main page active.
-8. Export a PNG preview and compare it visually before claiming completion.
-9. Inspect the VSDX package before delivery. Use `scripts/inspect_vsdx_structure.py` from this skill or an equivalent check.
+   - Green modules: use `#ff00ff`, **never** green chroma.
+   - Mixed palettes: split into multiple sprite sheets by dominant color.
 
-## Non-Negotiables From Prior Corrections
+4. **Process icons** — remove chroma-key background, crop into individual transparent PNGs. Save each to a known path. See [Icon Asset Policy](#icon-asset-policy) and [Failure Recovery](#failure-recovery) below.
 
-- Do not hand-draw or code-draw content icons when the user asked for image2-generated icons. Native Visio shapes are fine for frames, arrows, badges, and simple containers.
-- Do not extract icons from the whole generated route image; generate/re-generate each module or module sprite sheet directly.
-- Do not put text inside icon images. All labels such as `LLM`, `HAMD-17`, `PHQ-9`, `MAE`, `AUC`, dataset names, and Chinese descriptions must be Visio text boxes.
-- Do not use green chroma key for green icon modules. Regenerate green rows/modules on magenta `#ff00ff`.
-- Do not claim editability if the final Visio is one large image. Verify text nodes and module counts.
-- Do not leave an `Original_Image_Reference` page as the page Visio opens to; this makes the file look like a single non-editable picture.
-- If a row looks dirty, gray, eaten, or haloed after background removal, regenerate that row/module with a safer key color instead of masking harder.
+### Phase 3: Build Visio File
 
-## Prompt Pattern
+5. **Build JSON plan** — create a complete JSON plan (see `references/plan_schema_and_qa.md`) specifying:
+   - Page dimensions matching the reference aspect ratio.
+   - All native Visio shapes (containers, frames, arrows, connectors, ovals).
+   - All image placements referencing the icon PNGs from Phase 2.
+   - All text boxes with explicit `fontSize`, `textColor`, `bold`, and `fontFamily` following the typography standards below.
 
-Use this pattern for module generation:
+6. **Run the generation script** — execute `scripts/create_visio_from_plan.ps1` to produce the `.vsdx`:
+   ```powershell
+   powershell -File path/to/scripts/create_visio_from_plan.ps1 -PlanPath plan.json -OutVsdx output.vsdx -OutPng preview.png -BackupExisting
+   ```
+   Use `-BackupExisting` whenever the output path already has a file.
+
+### Phase 4: Validate and Deliver
+
+7. **Export PNG preview** — use `-OutPng` parameter, or export separately. Compare visually against the reference. If issues found, adjust the JSON plan and re-run (the script with `-BackupExisting` preserves the previous version).
+
+8. **Inspect VSDX structure** — run `scripts/inspect_vsdx_structure.py` on the output. This is **read-only** and does not modify the `.vsdx`.
+
+9. **Deliver** — provide `.vsdx` + PNG preview + `icon_manifest.json` + validation output.
+
+## Critical Rule: No Overwrite During Validation
+
+- The main `.vsdx` is written **exactly once** by `create_visio_from_plan.ps1`.
+- If the output file already exists, use `-BackupExisting` to create a timestamped backup before overwriting.
+- **Never** re-run the script during validation as a "check" — use `inspect_vsdx_structure.py` (read-only).
+- **Never** embed the reference image as a page in the main `.vsdx` — this causes the diagram to look like a non-editable screenshot and was the root cause of the overwrite bug.
+- If the user wants a side-by-side reference, save it as a **separate** `.vsdx` file.
+- If validation fails, fix the JSON plan and re-run the script with `-BackupExisting`, never manually patch the `.vsdx`.
+
+## Environment
+
+Before starting, verify Visio and tools are available:
+
+```powershell
+powershell -File path/to/scripts/check_visio_environment.ps1 -TryCom
+```
+
+Requirements: Visio COM automation, Python for validation, optionally LibreOffice / pdftoppm for PNG fallback.
+
+## Visio Plan Schema
+
+Read `references/plan_schema_and_qa.md` for the complete JSON schema. Summary of shape types:
+
+- `rect`: rectangle with optional text, fill, line, dash, roundX.
+- `text`: text box (no fill, no line).
+- `oval`: ellipse with bounding box coordinates.
+- `line`: straight line with optional arrow.
+- `polyline`: multi-segment line, arrow only on last segment.
+- `image`: place a transparent PNG icon at center coordinates `(x, y)` with optional `widthPx` / `heightPx`.
+
+Coordinate system: pixel-based, origin at top-left, x right, y down. Default scale: 100 px = 1 inch.
+
+## Typography Standards
+
+All text boxes in the JSON plan **must** specify `fontSize` explicitly. Never rely on the script default. Follow this hierarchy:
+
+| Role | fontSize (pt) | bold | textColor | align | fontFamily |
+|---|---|---|---|---|---|
+| Main title | 18-20 | true | `RGB(0,51,102)` | 1 (center) | `Microsoft YaHei` |
+| Section header | 13-16 | true | `RGB(40,40,40)` | 1 (center) | `Microsoft YaHei` |
+| Box label | 10-12 | false | `RGB(50,50,50)` | 1 (center) | `Microsoft YaHei` |
+| Small annotation | 8-10 | false | `RGB(100,100,100)` | 0 (left) | `Calibri` |
+| Arrow / flow label | 9-11 | false | `RGB(60,60,60)` | 1 (center) | `Calibri` |
+| Code / model names | 10-12 | false | `RGB(30,30,30)` | 1 (center) | `Consolas` |
+
+**Chinese text tips**: if a label wraps ugly, shorten the text, enlarge the box, or reduce fontSize slightly. Do not force long Chinese text into narrow boxes. Use `"Microsoft YaHei"` or `"SimHei"` for all Chinese labels.
+
+## Layout Standards
+
+| Element | Recommended (px at 100 scale) |
+|---|---|
+| Canvas margin | 30-50 px all sides |
+| Gap between sibling boxes | 15-20 px |
+| Gap between sections | 40-60 px |
+| Main container height | 80-100 px |
+| Sub-container height | 55-70 px |
+| Icon area | 60-80 x 60-80 px |
+
+- Boxes in the same row or section must have **identical heights**.
+- Sidebar boxes need 15-20 px gaps (not 2-10 px).
+- Total diagram height should be between 800-1500 px for typical route diagrams.
+- Always leave margin on all sides; do not let shapes touch page edges.
+
+## Icon Asset Policy
+
+Use one of these strategies, by preference:
+
+1. **Preferred: generate each icon individually** — highest semantic accuracy.
+2. **Allowed: sprite sheet + crop** — when icons share style and palette. Crop only from a dedicated sprite sheet, never from a full route diagram.
+3. **Fallback: cropped references** — only for semantic understanding. Always regenerate clean icons from prompts.
+
+### Quality requirements
+
+| Requirement | Detail |
+|---|---|
+| Format | Separate transparent PNG per icon. |
+| No text | No letters, numbers, labels, legends, watermarks in icons. |
+| Consistent style | Same stroke weight, padding, perspective, color palette. |
+| Minimum resolution | 512x512 px per icon; 1024x1024 for complex icons. |
+| Green modules | Always use magenta `#ff00ff` chroma key. |
+
+### Icon manifest fields
+
+| Field | Purpose |
+|---|---|
+| `icon_id` | Unique identifier. |
+| `meaning` | What the icon expresses. |
+| `prompt` | The image2 prompt used. |
+| `key_color` | Chroma-key color (e.g. `#00ff00`). |
+| `file` | Final transparent-PNG filename. |
+| `placement` | Which Visio module/region it belongs to. |
+| `status` | `ok` / `regenerate` / `reject`. |
+
+### Prompt pattern
 
 ```text
 Generate a clean sprite sheet of separate no-text icon modules for a scientific technical route diagram.
@@ -56,118 +156,86 @@ Modules: <ordered list of icon modules>.
 
 For green modules, set `<KEY_COLOR>` to `#ff00ff`.
 
-## Icon Asset Policy
-
-Use one of the following icon-asset strategies, listed by preference:
-
-### 1. Preferred: generate each icon module directly
-
-For important or complex modules, generate one no-text icon at a time on a flat chroma-key background. This gives the highest semantic accuracy and avoids layout contamination from a full route diagram.
-
-### 2. Allowed: generate a sprite sheet and crop modules
-
-A sprite sheet may be used when multiple icons share the same style and color palette. After generation, remove the chroma-key background and crop each module into an individual transparent PNG. **Cropping is allowed only from a dedicated icon sprite sheet, not from a full rendered route diagram.**
-
-### 3. Fallback: use cropped reference icons only as semantic references
-
-If the user provides a low-resolution route diagram or screenshot, cropped icons may be used only to understand the intended meaning and style. Do not upscale and reuse them as final assets. Instead, regenerate clean no-text icon modules from prompts derived from those references.
-
-### Quality requirements (all strategies)
-
-| Requirement | Detail |
-|---|---|
-| Format | Each final icon must be a separate transparent PNG. |
-| No text | No Chinese text, English text, letters, numbers, labels, legends, or watermarks inside icon images. |
-| Consistent style | Icons must share consistent visual style, stroke weight, padding, perspective, and color palette. |
-| Minimum resolution | Each cropped icon must be at least **512×512 px**; complex icons should be **1024×1024 px**. Never forcibly upscale a small PNG inside Visio. |
-| Defect handling | If an icon is blurry, dirty, haloed, clipped, or semantically wrong after background removal, regenerate the module — do not over-mask or upscale it. |
-| Green modules | Always use magenta `#ff00ff` chroma key for green icons. Never use a green background. |
-
-### Icon manifest
-
-Before generating any icons, produce an `icon_manifest.json` (or equivalent table) documenting every module:
-
-| Field | Purpose |
-|---|---|
-| `icon_id` | Unique identifier for this icon. |
-| `meaning` | What the icon expresses in the diagram. |
-| `prompt` | The image2 prompt used to generate it. |
-| `key_color` | Chroma-key background color (e.g. `#00ff00`). |
-| `file` | Final transparent-PNG filename. |
-| `placement` | Which Visio module or layout region it belongs to. |
-| `status` | One of: `ok` / `regenerate` / `reject`. |
-
-The manifest helps the agent plan consistently and lets you review or re-generate individual icons without touching unrelated modules.
-
-### Single-icon vs. sprite-sheet decision rule
-
-| Generate each icon individually when… | Use a sprite sheet only when… |
-|---|---|
-| The icon is semantically important (e.g. the central model or key dataset). | Icons are visually simple (single object, few details). |
-| The icon contains multiple objects or fine details. | All modules share the same style and color palette. |
-| The icon failed once in a sprite sheet (semantic drift or distortion). | The primary goal is style consistency rather than semantic precision. |
-| The icon needs a distinct perspective or composition. | |
-
-**If semantic accuracy conflicts with style consistency, prioritize semantic accuracy and regenerate the icon individually.**
-
 ## Failure Recovery
-
-When an icon asset fails quality checks, follow these rules instead of trying to repair the image:
 
 | Symptom | Action |
 |---|---|
-| Residual text in icon | Regenerate with a stronger prompt forbidding text. Do not manually erase. |
-| Green/magenta halo on edges | Change chroma key (pick a color absent from the icon subject) and regenerate. Do not mask harder. |
-| Icon too blurry or small | Regenerate at a higher resolution with the same prompt. Do not upscale in post-processing. |
-| Inconsistent style across icons | Merge all modules into one sprite sheet and regenerate together for visual consistency. |
-| Semantic mismatch (wrong object) | Fix the prompt description and regenerate. Do not keep a wrong icon just because it looks clean. |
-| Clipping or missing padding | Regenerate with explicit padding and `no clipping` constraints. Do not pad by stretching the image canvas. |
+| Residual text in icon | Regenerate with stronger no-text prompt. Do not manually erase. |
+| Green/magenta halo | Change chroma key and regenerate. Do not mask harder. |
+| Too blurry or small | Regenerate at higher resolution. Do not upscale. |
+| Inconsistent style | Merge into one sprite sheet and regenerate together. |
+| Semantic mismatch | Fix the prompt and regenerate. |
+| Clipping / missing padding | Regenerate with explicit padding constraints. |
 
-**Core rule**: when an icon is defective, always regenerate it. Post-processing tricks (eraser, clone stamp, forced upscale, alpha tweaks) create inconsistency and waste time. The only exception is chroma-key removal, which is a deterministic local operation.
+**Core rule**: always regenerate defective icons. Post-processing creates inconsistency.
+
+## Non-Negotiables From Prior Corrections
+
+- Do not hand-draw or code-draw content icons — generate them with image2.
+- Do not extract icons from a full generated route image.
+- Do not put text inside icon images — all labels are Visio text boxes.
+- Do not use green chroma for green icons.
+- Do not embed reference image as a page in the main `.vsdx` — root cause of overwrite bug.
+- Do not re-run `create_visio_from_plan.ps1` without `-BackupExisting` when output exists.
+- Do not claim editability if the final Visio is one large image.
+- If icons look dirty, gray, or haloed, regenerate — do not over-mask.
+
+## PowerShell and Visio Notes
+
+- Windows PowerShell 5.1 may misread UTF-8 scripts with Chinese characters. If writing PS1 files with Chinese, add UTF-8 BOM after writing:
+  ```python
+  python -c "p='script.ps1'; c=open(p,'rb').read(); open(p,'wb').write(b'\xef\xbb\xbf'+c.lstrip(b'\xef\xbb\xbf'))"
+  ```
+- Visio COM startup needs 4-second wait after `New-Object -ComObject Visio.Application`.
+- Set `AlertResponse = 7` to suppress dialogs (non-fatal if it fails).
+- If COM rejects with `RPC_E_CALL_REJECTED`, close blank Visio windows, wait 10s, retry.
+- If PNG export hangs, export EMF first and convert with LibreOffice or `pdftoppm`.
+- Font cells: bold is `Char.Style` (NOT `Char.Bold`), size is `Char.Size`, family is `Char.Font`.
+- In PowerShell double-quoted strings, avoid inline `$()` — pre-compute values into variables first.
 
 ## Final Delivery
 
 Every deliverable must include:
 
-- **Editable `.vsdx` file** — the main Visio diagram with native shapes and text boxes.
-- **PNG preview** — a rendered export of the main page for quick visual review.
-- **`icon_manifest.json`** — the manifest documenting all icon modules (icon_id, meaning, prompt, key_color, file, placement, status).
-- **Validation output** — the full JSON result and pass/fail summary from `inspect_vsdx_structure.py`.
-
-These four artifacts let you re-generate or repair individual icons later without reverse-engineering the `.vsdx`.
+- **Editable `.vsdx`** — generated by script, native shapes + text boxes + placed icon PNGs.
+- **PNG preview** — exported from the main page for visual review.
+- **`icon_manifest.json`** — all icon modules documented.
+- **Validation output** — JSON result from `inspect_vsdx_structure.py`.
 
 ## Validation Checklist
 
 Before final response, verify:
 
 - Preview PNG exists and shows the main route page.
-- VSDX has the expected single main page unless user asked for references.
-- Image shape count roughly equals the number of generated icon modules, and total shapes include both icon images and native Visio shapes.
-- Text node count is nonzero and includes the labels/descriptions.
-- No `Original_Image_Reference` marker is present in the final VSDX.
-- No single image occupies more than 35 % of the page area (run `--forbid-large-background-image`).
-- Native shape count indicates actual Visio objects (frames, arrows, containers), not just embedded images.
-- Icon manifest (or equivalent) is complete with status and placement.
-- Final delivery includes `.vsdx` + PNG preview + `icon_manifest.json` + validation output.
-- The final answer states the editability boundary: icon modules are raster PNGs; text boxes, frames, and arrows are editable Visio objects.
+- VSDX has the expected single main page (no embedded reference page).
+- Image shape count matches the number of generated icon modules.
+- Text node count is nonzero and includes all labels.
+- No `Original_Image_Reference` marker in the VSDX.
+- No single image occupies more than 35% of the page area.
+- Native shape count indicates actual Visio objects (frames, arrows, containers).
+- Font sizes follow the typography hierarchy (all text has explicit fontSize).
+- Gaps between boxes are 15-20 px, not 2-5 px.
+- Icon manifest is complete with status and placement.
+- The final answer states the editability boundary: icons are raster PNGs; text, frames, and arrows are editable Visio objects.
 
 ## Useful Commands
 
-Inspect a VSDX with all checks:
-
+Check environment:
 ```powershell
-python path\to\scripts\inspect_vsdx_structure.py output.vsdx --expect-single-page --min-media 5 --min-text 10 --min-image-shapes 5 --min-native-shapes 10 --forbid-reference --forbid-large-background-image
+powershell -File path/to/scripts/check_visio_environment.ps1 -TryCom
 ```
 
-Check for unexpectedly large background images only:
-
+Generate Visio from JSON plan:
 ```powershell
-python path\to\scripts\inspect_vsdx_structure.py output.vsdx --forbid-large-background-image --max-image-area-ratio 0.35
+powershell -File path/to/scripts/create_visio_from_plan.ps1 -PlanPath plan.json -OutVsdx output.vsdx -OutPng preview.png -BackupExisting
 ```
 
-Use the imagegen skill's chroma-key helper for transparency:
+Inspect VSDX structure:
+```powershell
+E:/Anaconda/python.exe path/to/scripts/inspect_vsdx_structure.py output.vsdx --expect-single-page --min-media 5 --min-text 10 --min-image-shapes 5 --min-native-shapes 10 --forbid-reference --forbid-large-background-image
+```
 
+Remove chroma key for transparency:
 ```powershell
 python "$env:USERPROFILE\.codex\skills\.system\imagegen\scripts\remove_chroma_key.py" --input sprite.png --out sprite_alpha.png --key-color "#ff00ff" --soft-matte --transparent-threshold 45 --opaque-threshold 170 --despill --force
 ```
-
